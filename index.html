@@ -15,9 +15,14 @@
   *{box-sizing:border-box}
   html,body{margin:0;height:100%}
   body{font-family:Heebo,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
-  .app{display:grid;grid-template-columns:minmax(360px,440px) 1fr;height:100vh}
-  @media (max-width:900px){.app{grid-template-columns:1fr;height:auto}.editor{max-height:none}}
-  .editor{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:20px 18px 40px}
+  .app{display:grid;grid-template-columns:var(--ew,420px) 8px 1fr;height:100vh}
+  .resizer{cursor:col-resize;background:var(--line);position:relative;touch-action:none}
+  .resizer::after{content:'';position:absolute;top:50%;left:2px;width:4px;height:44px;margin-top:-22px;border-radius:2px;background:#b9b4aa}
+  .resizer:hover,.resizer.active{background:#c9d3ea}
+  .resizer:hover::after,.resizer.active::after{background:#2E5FAE}
+  body.resizing{cursor:col-resize;user-select:none}
+  @media (max-width:900px){.app{grid-template-columns:1fr;height:auto}.editor{max-height:none}.resizer{display:none}}
+  .editor{background:var(--panel);overflow:auto;padding:20px 18px 40px}
   h1{font-size:20px;margin:0 0 4px}
   .sub{color:var(--muted);margin:0 0 18px;line-height:1.4}
   label.field{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:4px}
@@ -124,6 +129,7 @@
     <div class="note" id="note"></div>
   </aside>
 
+  <div class="resizer" id="resizer" title="Drag to resize · double-click to reset" role="separator" aria-orientation="vertical" aria-label="Resize the side panel" tabindex="0"></div>
   <main class="preview">
     <div class="canvas-wrap"><canvas id="poster" width="1920" height="1080"></canvas></div>
     <div class="pv-label">1920 × 1080 · TV size</div>
@@ -677,6 +683,31 @@
   } else {
     useLocal();
   }
+
+  // ---------- Resizable side panel ----------
+  (function(){
+    const app=document.querySelector('.app'), rz=document.getElementById('resizer'), WKEY='events-poster-maker-panel';
+    const DEF=420, MIN=300;
+    const max=()=>Math.max(MIN, Math.round(window.innerWidth*0.7));
+    function setW(w){ w=Math.min(max(),Math.max(MIN,Math.round(w))); app.style.setProperty('--ew', w+'px'); return w; }
+    let saved=null; try{ saved=parseInt(localStorage.getItem(WKEY),10); }catch(e){}
+    let cur=setW(saved||DEF);
+    function store(){ try{ localStorage.setItem(WKEY,String(cur)); }catch(e){} }
+    rz.addEventListener('pointerdown',e=>{
+      e.preventDefault(); rz.setPointerCapture(e.pointerId); rz.classList.add('active'); document.body.classList.add('resizing');
+      const startX=e.clientX, startW=cur;
+      const move=ev=>{ cur=setW(startW+(ev.clientX-startX)); };
+      const up=()=>{ rz.removeEventListener('pointermove',move); rz.removeEventListener('pointerup',up); rz.removeEventListener('pointercancel',up);
+        rz.classList.remove('active'); document.body.classList.remove('resizing'); store(); };
+      rz.addEventListener('pointermove',move); rz.addEventListener('pointerup',up); rz.addEventListener('pointercancel',up);
+    });
+    rz.addEventListener('dblclick',()=>{ cur=setW(DEF); store(); });
+    rz.addEventListener('keydown',e=>{
+      if(e.key==='ArrowLeft'){ cur=setW(cur-20); store(); e.preventDefault(); }
+      if(e.key==='ArrowRight'){ cur=setW(cur+20); store(); e.preventDefault(); }
+    });
+    window.addEventListener('resize',()=>{ cur=setW(cur); });
+  })();
 
   buildEditor();
   draw();
