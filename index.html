@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Events Poster Maker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;700;800&family=Playfair+Display:wght@800&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#f4f2ee; --panel:#ffffff; --ink:#1d2433; --muted:#6b7280; --line:#e3e0d9;
+    --accent:#13285c; --accent-ink:#fff; --danger:#b42318;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0;height:100%}
+  body{font-family:Heebo,system-ui,sans-serif;background:var(--bg);color:var(--ink);font-size:14px}
+  .app{display:grid;grid-template-columns:minmax(360px,440px) 1fr;height:100vh}
+  @media (max-width:900px){.app{grid-template-columns:1fr;height:auto}.editor{max-height:none}}
+  .editor{background:var(--panel);border-right:1px solid var(--line);overflow:auto;padding:20px 18px 40px}
+  h1{font-size:20px;margin:0 0 4px}
+  .sub{color:var(--muted);margin:0 0 18px;line-height:1.4}
+  label.field{display:block;font-size:12px;font-weight:500;color:var(--muted);margin-bottom:4px}
+  input,select{font:inherit;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
+  input:focus,select:focus{outline:2px solid #9db0e0;outline-offset:0;border-color:#9db0e0}
+  .row{margin-bottom:12px}
+  .saved{border:1px solid #d7ddec;background:#f5f7fc;border-radius:10px;padding:12px;margin-bottom:18px}
+  .saved-title{font-weight:700;margin-bottom:8px}
+  .saved-save{display:grid;grid-template-columns:1fr auto;gap:6px}
+  .saved-list{margin-top:8px;max-height:220px;overflow:auto}
+  .saved-item{display:grid;grid-template-columns:1fr auto auto;gap:6px;align-items:center;padding:6px 0;border-top:1px solid #e3e7f1}
+  .saved-item:first-child{border-top:0}
+  .saved-item .nm{font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .saved-item .when{font-size:11px;color:var(--muted)}
+  .saved-item button{padding:4px 10px;font-size:12px}
+  .saved-item.current .nm::after{content:' · open';color:#2E5FAE;font-weight:400;font-size:12px}
+  .section{border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:14px;background:#fbfaf8}
+  .section-head{display:flex;gap:8px;align-items:center;margin-bottom:10px}
+  .section-head input{font-weight:700;font-size:15px}
+  .event{background:#fff;border:1px solid var(--line);border-radius:8px;padding:10px;margin-bottom:8px}
+  .grid{display:grid;gap:6px}
+  .g-name{grid-template-columns:1fr auto}
+  .g-dd{grid-template-columns:70px 80px 1fr}
+  .g-lt{grid-template-columns:1fr 1fr}
+  .g-dd4{grid-template-columns:58px 58px 66px 1fr}
+  .icon-row{display:flex;gap:6px;align-items:center;margin-top:8px}
+  .icon-row button{padding:4px 10px;font-size:12px}
+  .icon-thumb{width:32px;height:32px;object-fit:contain;border-radius:6px;background:#eef1f8;padding:2px}
+  .mini{font-size:11px;color:var(--muted);margin:2px 0 2px}
+  button{font:inherit;cursor:pointer;border-radius:7px;border:1px solid var(--line);background:#fff;color:var(--ink);padding:7px 11px}
+  button:hover{background:#f3f4f6}
+  button.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink);font-weight:700}
+  button.primary:hover{background:#1c3678}
+  button.icon{padding:6px 9px;color:var(--muted);line-height:1}
+  button.icon:hover{color:var(--danger)}
+  button.add{width:100%;border-style:dashed;color:var(--muted)}
+  .move{display:flex;gap:2px}
+  button.icon:disabled{opacity:.3;cursor:default}
+  button.icon:disabled:hover{color:var(--muted);background:#fff}
+  .section-type{margin-bottom:8px}
+  .my{display:grid;grid-template-columns:1fr 90px;gap:6px;flex:1}
+  .my select{font-weight:700;font-size:15px}
+  .section-type select{font-weight:700;font-size:12px;text-transform:uppercase;letter-spacing:.04em;color:var(--accent);width:auto;padding:4px 8px;background:#eef1f8;border-color:#d7ddec}
+  .g-name{grid-template-columns:auto 1fr auto !important;align-items:center}
+  .handle{cursor:grab;color:#9ca3af;font-size:16px;letter-spacing:-3px;padding:4px 6px 4px 2px;user-select:none;line-height:1}
+  .handle:hover{color:var(--accent)}
+  .section-head .handle{font-size:18px}
+  .dragging{opacity:.4}
+  .event.drop-before{box-shadow:0 -3px 0 0 #2E5FAE}
+  .event.drop-after{box-shadow:0 3px 0 0 #2E5FAE}
+  .section.drop-before{box-shadow:0 -4px 0 0 #2E5FAE}
+  .section.drop-after{box-shadow:0 4px 0 0 #2E5FAE}
+  .section.drop-into{outline:2px dashed #2E5FAE;outline-offset:2px}
+  .add-row{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+  .add-row .add{padding:7px 4px;font-size:12px}
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 6px}
+  .note{font-size:12px;color:var(--muted);min-height:18px}
+  .preview{display:flex;flex-direction:column;align-items:center;justify-content:center;padding:24px;overflow:auto}
+  .canvas-wrap{width:100%;max-width:1400px;box-shadow:0 6px 30px rgba(0,0,0,.15);border-radius:4px;overflow:hidden;background:#fff}
+  canvas{display:block;width:100%;height:auto}
+  .pv-label{color:var(--muted);font-size:12px;margin-top:10px}
+  input[type=file]{display:none}
+</style>
+</head>
+<body>
+<div class="app">
+  <aside class="editor">
+    <h1>Events Poster Maker</h1>
+    <p class="sub">Add a section, pick its month and year, then add its events. The poster on the right updates as you type. Leave <b>Day</b> blank and it's worked out from the month and date. Drag <b>⋮⋮</b> to move an event or a whole section.<br>Card colours are automatic: <b>navy</b> for the current month, <b>blue</b> for upcoming months, <b>gold</b> for every-week events, <b>teal</b> for Thanksgiving and <b>red</b> for Blood Donation.</p>
+
+    <div class="saved">
+      <div class="saved-title">Saved posters</div>
+      <div class="saved-save">
+        <input id="saveName" placeholder="Name, e.g. November 2026 poster" aria-label="Poster name">
+        <button class="primary" id="saveBtn">Save</button>
+      </div>
+      <div id="savedList" class="saved-list"><div class="mini">Loading saved posters…</div></div>
+    </div>
+
+    <div class="row">
+      <label class="field" for="topline">Top line</label>
+      <input id="topline">
+    </div>
+    <div class="row">
+      <label class="field" for="title">Title</label>
+      <input id="title">
+    </div>
+
+    <div id="sections"></div>
+    <div class="add-row">
+      <button class="add" data-type="current">+ Current month</button>
+      <button class="add" data-type="upcoming">+ Upcoming month</button>
+      <button class="add" data-type="weekly">+ Every week</button>
+    </div>
+
+    <div class="toolbar">
+      <button class="primary" id="download">Download poster (PNG)</button>
+      <button id="backup">Save backup</button>
+      <button id="restore">Load backup</button>
+      <button id="reset">Start over</button>
+      <input type="file" id="restoreFile" accept=".json,application/json">
+      <input type="file" id="iconFile" accept="image/*">
+    </div>
+    <div class="note" id="note"></div>
+  </aside>
+
+  <main class="preview">
+    <div class="canvas-wrap"><canvas id="poster" width="1920" height="1080"></canvas></div>
+    <div class="pv-label">1920 × 1080 · TV size</div>
+  </main>
+</div>
+
+<script>
+(function(){
+  const W = 1920, H = 1080;
+  const C = {
+    cream:'#FBF3E2', navy:'#13285C', gold:'#F2B52B', red:'#D3252B', teal:'#0E7C86',
+    blood:'#B4161F', white:'#FFFFFF'
+  };
+  const CARD_COLOURS = {
+    navy:{label:'Navy (this month)', fill:C.navy, text:'#fff', band:C.red},
+    blue:{label:'Blue (upcoming month)', fill:'#2E5FAE', text:'#fff', band:C.red},
+    teal:{label:'Teal (Thanksgiving)', fill:C.teal, text:'#fff', band:C.red},
+    red:{label:'Red (Blood Donation)', fill:C.blood, text:'#fff', band:C.navy},
+    gold:{label:'Gold (weekly)', fill:C.gold, text:C.navy, band:C.navy}
+  };
+  const MONTHS = ['january','february','march','april','may','june','july','august','september','october','november','december'];
+  const DAYS = ['SUN','MON','TUE','WED','THU','FRI','SAT'];
+
+  const SAMPLE = {
+    topline:'MCGI HAMILTON  ·  TAURANGA  ·  ROTORUA, NZ',
+    title:'Upcoming Events',
+    sections:[
+      {type:'current', heading:'November 2026', events:[
+        {name:'Family Day', date:'1', day:'', location:'Hamilton', time:'Registration opens 12 AM', colour:'auto'},
+        {name:'Kids, Teens, Parents, Servants & Organizers Thanksgiving', date:'14', day:'', location:'', time:'', colour:'auto'},
+        {name:'Locale Bonding – Tauranga', date:'15', day:'', location:'Tauranga Locale', time:'Time TBD', colour:'auto'},
+        {name:'Locale SK', date:'20', day:'', location:'Respective Locales', time:'7:00 PM', colour:'auto'},
+        {name:'Sports Fest', date:'22', day:'', location:'North Auckland', time:'Time TBD', colour:'auto'},
+        {name:'NZ Choir Meeting', date:'28', day:'', location:'Respective Locales', time:'After live WS', colour:'auto'},
+        {name:'PWD Day', date:'29', day:'', location:'Venue TBD', time:'3:45 PM', colour:'auto'}
+      ]},
+      {type:'upcoming', heading:'December 2026', events:[
+        {name:'Blood Donation', date:'5', day:'', location:'Blood NZ', time:'After live WS', colour:'auto'},
+        {name:'Blood Donation', date:'19', day:'', location:'Blood NZ', time:'After live WS', colour:'auto'}
+      ]},
+      {type:'weekly', heading:'Every Week', events:[
+        {name:'AOD Community Prayer', date:'FRI', day:'EVERY', location:'Respective Locales', time:'9:00 PM', colour:'auto'}
+      ]}
+    ]
+  };
+
+  const KEY = 'events-poster-maker-v2';
+  let state;
+  try { state = JSON.parse(localStorage.getItem(KEY)); } catch(e) { state = null; }
+  if (!state || !Array.isArray(state.sections)) {
+    let old=null; try { old = JSON.parse(localStorage.getItem('events-poster-maker-v1')); } catch(e){}
+    if (old && Array.isArray(old.sections)) { old.sections.forEach(sc=>sc.events.forEach(ev=>ev.colour='auto')); state=old; }
+    else state = JSON.parse(JSON.stringify(SAMPLE));
+  }
+
+  const TYPES = {current:'Current month', upcoming:'Upcoming month', weekly:'Every week'};
+  const MONTH_NAMES = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+  function setHeading(sc){ if (sc.type!=='weekly' && sc.month!=null && sc.year) sc.heading = MONTH_NAMES[sc.month]+' '+sc.year; }
+  function parseHeading(sc){
+    const m=String(sc.heading||'').trim().toLowerCase().match(/^([a-z]+)\s+(\d{4})$/);
+    if (m){ const i=MONTH_NAMES.findIndex(n=>n.toLowerCase()===m[1]); if(i>=0){ sc.month=i; sc.year=+m[2]; return true; } }
+    return false;
+  }
+  // month after the last month section before position `at` (or today's month)
+  function nextMonthAfter(at){
+    for (let i=Math.min(at,state.sections.length)-1;i>=0;i--){
+      const p=state.sections[i];
+      if (p.type!=='weekly' && p.month!=null && p.year){ return p.month===11 ? {month:0,year:p.year+1} : {month:p.month+1,year:p.year}; }
+    }
+    const d=new Date(); return {month:d.getMonth(), year:d.getFullYear()};
+  }
+  function ensureTypes(){
+    let seenMonth=false;
+    state.sections.forEach(sc=>{
+      if (!TYPES[sc.type]) {
+        if (/week/i.test(sc.heading||'')) sc.type='weekly';
+        else { sc.type = seenMonth ? 'upcoming' : 'current'; }
+      }
+      if (sc.type!=='weekly') {
+        seenMonth=true;
+        if (sc.month==null || !sc.year){ if(!parseHeading(sc)){ const n=nextMonthAfter(state.sections.indexOf(sc)); sc.month=n.month; sc.year=n.year; } }
+        setHeading(sc);
+      }
+    });
+  }
+  ensureTypes();
+
+  function save(){ try { localStorage.setItem(KEY, JSON.stringify(state)); } catch(e){} }
+  function note(msg){ const n=document.getElementById('note'); n.textContent=msg; clearTimeout(note.t); note.t=setTimeout(()=>n.textContent='',4000); }
+
+  // ---------- Day helper ----------
+  function autoDay(heading, date){
+    const m = String(heading||'').toLowerCase().match(/([a-z]+)\s+(\d{4})/);
+    const d = parseInt(date,10);
+    if (!m || isNaN(d)) return '';
+    const mi = MONTHS.indexOf(m[1]); if (mi<0) return '';
+    const dt = new Date(+m[2], mi, d);
+    if (dt.getMonth()!==mi) return '';
+    return DAYS[dt.getDay()];
+  }
+  // ---------- Colour rules ----------
+  // weekly -> gold, Thanksgiving -> teal, Blood Donation -> red,
+  // otherwise the first month on the poster -> navy, later months -> blue
+  function isWeekly(sec, ev){ return sec.type==='weekly' || /^every$/i.test((ev&&ev.day||'').trim()); }
+  function isMonth(sec){ return /[a-z]+\s+\d{4}/i.test(sec.heading||'') && MONTHS.indexOf(String(sec.heading).trim().toLowerCase().split(/\s+/)[0])>=0; }
+  function currentMonthIndex(){ return state.sections.findIndex(sc=>isMonth(sc) && !/week/i.test(sc.heading)); }
+  function autoColour(sec, ev){
+    if (isWeekly(sec, ev)) return 'gold';
+    if (/thanksgiving/i.test(ev.name||'')) return 'teal';
+    if (/blood\s*donation/i.test(ev.name||'')) return 'red';
+    return sec.type==='upcoming' ? 'blue' : 'navy';
+  }
+  function colourFor(sec, ev){ return (!ev.colour || ev.colour==='auto') ? autoColour(sec, ev) : ev.colour; }
+
+  // multi-day: returns {startDay,endDay,days} or null
+  function rangeFor(sec, ev){
+    if (sec.type==='weekly') return null;
+    const a=parseInt(ev.date,10), b=parseInt(ev.end,10);
+    if (isNaN(a)||isNaN(b)||sec.month==null||!sec.year) return null;
+    const s0=new Date(sec.year, sec.month, a);
+    const e0= b>=a ? new Date(sec.year, sec.month, b) : new Date(sec.year, sec.month+1, b);
+    const days=Math.round((e0-s0)/86400000)+1;
+    if (days<2 || days>31) return null;
+    return {startDay: dayFor(sec,ev), endDay: DAYS[e0.getDay()], days};
+  }
+  function dayFor(sec, ev){ return (ev.day||'').trim().toUpperCase() || (sec.type==='weekly' ? 'EVERY' : autoDay(sec.heading, ev.date)); }
+
+  // ---------- Editor ----------
+  const secWrap = document.getElementById('sections');
+  function el(tag, attrs, ...kids){
+    const e=document.createElement(tag);
+    for (const k in (attrs||{})){
+      if (k==='on') for (const ev in attrs.on) e.addEventListener(ev, attrs.on[ev]);
+      else if (k in e && k!=='list') e[k]=attrs[k]; else e.setAttribute(k, attrs[k]);
+    }
+    kids.flat().forEach(k=>k!=null && e.append(k));
+    return e;
+  }
+  function input(obj, key, placeholder, opts={}){
+    return el('input',{value:obj[key]||'', placeholder, 'aria-label':opts.label||placeholder,
+      on:{input:e=>{obj[key]=e.target.value; changed(opts.rebuild);}}});
+  }
+  function buildEditor(){
+    document.getElementById('topline').value = state.topline||'';
+    document.getElementById('title').value = state.title||'';
+    secWrap.innerHTML='';
+    state.sections.forEach((sec, si)=>{
+      const box = el('div',{className:'section'});
+      box.append(el('div',{className:'section-type'},
+        el('select',{'aria-label':'Section type', on:{change:e=>{
+          const was=sec.type; sec.type=e.target.value;
+          if (sec.type==='weekly'){ if(was!=='weekly') sec.heading='Every Week'; }
+          else { if (sec.month==null || !sec.year || was==='weekly'){ const n=nextMonthAfter(si); sec.month=n.month; sec.year=n.year; } setHeading(sec); }
+          changed(true);}}},
+          Object.entries(TYPES).map(([k,v])=>el('option',{value:k,textContent:v,selected:sec.type===k})))));
+      const thisYear=new Date().getFullYear();
+      const years=[]; for(let y=thisYear-1;y<=thisYear+3;y++) years.push(y);
+      if (sec.year && !years.includes(sec.year)) years.push(sec.year), years.sort();
+      const headCtl = sec.type==='weekly'
+        ? input(sec,'heading','Heading, e.g. Every Week',{label:'Section heading', rebuild:true})
+        : el('div',{className:'my'},
+            el('select',{'aria-label':'Month', on:{change:e=>{sec.month=+e.target.value; setHeading(sec); changed(true);}}},
+              MONTH_NAMES.map((n,i)=>el('option',{value:String(i),textContent:n,selected:sec.month===i}))),
+            el('select',{'aria-label':'Year', on:{change:e=>{sec.year=+e.target.value; setHeading(sec); changed(true);}}},
+              years.map(y=>el('option',{value:String(y),textContent:String(y),selected:sec.year===y}))));
+      box.dataset.si=si;
+      box.append(el('div',{className:'section-head'},
+        dragHandle(box,{kind:'section',si},'Drag to move this section'),
+        headCtl,
+        el('div',{className:'move'},
+          el('button',{className:'icon',title:'Delete this month',textContent:'✕',on:{click:()=>{ if(sec.events.length && !box.dataset.confirm){box.dataset.confirm=1; note('Click ✕ again to delete "'+(sec.heading||'this month')+'" and its events.'); return;} state.sections.splice(si,1); changed(true);}}})
+        )));
+      sec.events.forEach((ev, ei)=>{
+        const auto = autoDay(sec.heading, ev.date);
+        const dayIn = input(ev,'day', auto||'Day', {label:'Day'});
+        const dateIn = el('input',{value:ev.date||'', placeholder:'Date', 'aria-label':'Date',
+          on:{input:e=>{ev.date=e.target.value; dayIn.placeholder = autoDay(sec.heading, ev.date)||'Day'; changed();}}});
+        const endIn = el('input',{value:ev.end||'', placeholder:'End', 'aria-label':'End date (for events over several days)', title:'End date — only for events that run over several days',
+          on:{input:e=>{ev.end=e.target.value; changed();}}});
+        const iconRow = el('div',{className:'icon-row'},
+          ev.icon ? el('img',{src:ev.icon,alt:'Event icon',className:'icon-thumb'}) : null,
+          el('button',{textContent: ev.icon?'Change icon':'+ Add icon', on:{click:()=>pickIcon(ev)}}),
+          ev.icon ? el('button',{textContent:'Remove',on:{click:()=>{delete ev.icon; changed(true);}}}) : null);
+        const colour = el('select',{'aria-label':'Card colour', on:{change:e=>{ev.colour=e.target.value; changed(true);}}},
+          [el('option',{value:'auto',textContent:'Auto · '+CARD_COLOURS[autoColour(sec,ev)].label.split(' ')[0],selected:!ev.colour||ev.colour==='auto'})]
+          .concat(Object.entries(CARD_COLOURS).map(([k,v])=>el('option',{value:k,textContent:v.label,selected:ev.colour===k}))));
+        const evBox = el('div',{className:'event'});
+        evBox.dataset.si=si; evBox.dataset.ei=ei;
+        box.append(evBox);
+        evBox.append(
+          el('div',{className:'grid g-name'}, dragHandle(evBox,{kind:'event',si,ei},'Drag to move this event'), input(ev,'name','Event name'),
+            el('button',{className:'icon',title:'Delete event',textContent:'✕',on:{click:()=>{sec.events.splice(ei,1); changed(true);}}})),
+          el('div',{className:'mini'}, sec.type==='weekly' ? 'Day · Label · Card colour' : 'Date · End date (optional) · Day · Card colour'),
+          el('div',{className:'grid '+(sec.type==='weekly'?'g-dd':'g-dd4')}, dateIn, sec.type==='weekly'?null:endIn, dayIn, colour),
+          el('div',{className:'mini'},'Location · Time'),
+          el('div',{className:'grid g-lt'}, input(ev,'location','Location'), input(ev,'time','Time')),
+          iconRow
+        );
+      });
+      box.addEventListener('dragover',e=>dragOverSection(e,box,si));
+      box.addEventListener('drop',e=>dropOn(e));
+      box.append(el('button',{className:'add',textContent:'+ Add event',on:{click:()=>{sec.events.push({name:'',date:'',day:'',location:'',time:'',colour:'auto'}); changed(true); const ins=box.parentNode&&secWrap.children[si]?.querySelectorAll('.event input'); }}}));
+      secWrap.append(box);
+    });
+  }
+  // ---------- Event icons ----------
+  let iconTarget=null;
+  const iconFile=document.getElementById('iconFile');
+  function pickIcon(ev){ iconTarget=ev; iconFile.click(); }
+  iconFile.addEventListener('change',async e=>{
+    const f=e.target.files[0]; e.target.value=''; if(!f||!iconTarget) return;
+    try{
+      const url=URL.createObjectURL(f);
+      const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=url; });
+      const M=160, k=Math.min(1, M/Math.max(img.naturalWidth,img.naturalHeight));
+      const c=document.createElement('canvas'); c.width=Math.max(1,Math.round(img.naturalWidth*k)); c.height=Math.max(1,Math.round(img.naturalHeight*k));
+      c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
+      iconTarget.icon=c.toDataURL('image/png'); iconTarget=null; changed(true); note('Icon added.');
+    }catch(err){ note('That image could not be read. Try a PNG or JPG.'); }
+  });
+  const iconCache={};
+  function iconImg(src){
+    if(!src) return null;
+    let im=iconCache[src];
+    if(!im){ im=new Image(); im.onload=()=>{ cancelAnimationFrame(raf); raf=requestAnimationFrame(draw); }; im.src=src; iconCache[src]=im; }
+    return im.complete && im.naturalWidth ? im : null;
+  }
+
+  // ---------- Drag and drop ----------
+  let drag=null, target=null;
+  function clearMarks(){ document.querySelectorAll('.drop-before,.drop-after,.drop-into').forEach(x=>x.classList.remove('drop-before','drop-after','drop-into')); }
+  function dragHandle(box, info, title){
+    const h=el('span',{className:'handle',title,textContent:'⋮⋮','aria-label':title});
+    h.addEventListener('mousedown',()=>{ box.draggable=true; });
+    h.addEventListener('touchstart',()=>{ box.draggable=true; },{passive:true});
+    box.addEventListener('dragstart',e=>{
+      if(!box.draggable) return; e.stopPropagation();
+      drag=info; box.classList.add('dragging');
+      try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',''); }catch(_){}
+    });
+    box.addEventListener('dragend',()=>{ box.draggable=false; box.classList.remove('dragging'); clearMarks(); drag=null; target=null; });
+    document.addEventListener('mouseup',()=>{ if(!drag) box.draggable=false; });
+    return h;
+  }
+  function half(e, node){ const r=node.getBoundingClientRect(); return e.clientY < r.top+r.height/2 ? 'before':'after'; }
+  function dragOverSection(e, box, si){
+    if(!drag) return;
+    e.preventDefault(); clearMarks();
+    if (drag.kind==='section'){
+      const where=half(e,box); box.classList.add('drop-'+where); target={si, where};
+      return;
+    }
+    // event: find the event card under the pointer, else drop at end of this section
+    const cards=[...box.querySelectorAll('.event')];
+    const over=cards.find(c=>{ const r=c.getBoundingClientRect(); return e.clientY>=r.top && e.clientY<=r.bottom; });
+    if (over){ const where=half(e,over); over.classList.add('drop-'+where); target={si, ei:+over.dataset.ei + (where==='after'?1:0)}; }
+    else {
+      const before=cards.find(c=>e.clientY < c.getBoundingClientRect().top);
+      if (before){ before.classList.add('drop-before'); target={si, ei:+before.dataset.ei}; }
+      else { box.classList.add('drop-into'); target={si, ei:state.sections[si].events.length}; }
+    }
+  }
+  function dropOn(e){
+    if(!drag||!target) return; e.preventDefault(); e.stopPropagation();
+    const S=state.sections;
+    if (drag.kind==='section'){
+      let to = target.si + (target.where==='after'?1:0);
+      const [moved]=S.splice(drag.si,1); if (drag.si<to) to--; S.splice(to,0,moved);
+    } else {
+      const from=S[drag.si], to=S[target.si];
+      let ti=target.ei;
+      const [ev]=from.events.splice(drag.ei,1);
+      if (from===to && drag.ei<ti) ti--;
+      to.events.splice(ti,0,ev);
+    }
+    drag=null; target=null; clearMarks(); changed(true);
+  }
+
+  function moveEv(sec,i,d){ const j=i+d; if(j<0||j>=sec.events.length) return; const e=sec.events; [e[i],e[j]]=[e[j],e[i]]; changed(true); }
+  function moveSec(i,d){ const j=i+d; if(j<0||j>=state.sections.length) return; const s=state.sections; [s[i],s[j]]=[s[j],s[i]]; changed(true); }
+  document.getElementById('topline').addEventListener('input',e=>{state.topline=e.target.value; changed();});
+  document.getElementById('title').addEventListener('input',e=>{state.title=e.target.value; changed();});
+  document.querySelectorAll('.add-row button').forEach(b=>b.addEventListener('click',()=>{
+    const t=b.dataset.type;
+    const sc={type:t, heading:'Every Week', events:[{name:'',date:'',day:'',location:'',time:'',colour:'auto'}]};
+    let at = state.sections.length;
+    if (t!=='weekly'){
+      // month sections go after the last month section, above any Every Week section
+      let last=-1; state.sections.forEach((x,i)=>{ if(x.type!=='weekly') last=i; });
+      at = last+1;
+      const n = t==='current' ? {month:new Date().getMonth(), year:new Date().getFullYear()} : nextMonthAfter(at);
+      sc.month=n.month; sc.year=n.year; setHeading(sc);
+    }
+    state.sections.splice(at,0,sc);
+    changed(true); secWrap.children[at]?.querySelector('.event input')?.focus();
+  }));
+
+  let raf=0;
+  function changed(rebuild){ save(); if(rebuild) buildEditor(); cancelAnimationFrame(raf); raf=requestAnimationFrame(draw); }
+
+  // ---------- Poster drawing ----------
+  const cv = document.getElementById('poster');
+  const ctx = cv.getContext('2d');
+
+  function rr(x,y,w,h,r){ ctx.beginPath(); ctx.roundRect ? ctx.roundRect(x,y,w,h,r) : ctx.rect(x,y,w,h); }
+  function font(weight,size,fam){ return weight+' '+size+'px '+(fam||'Heebo')+', sans-serif'; }
+  function setSpacing(px){ if ('letterSpacing' in ctx) ctx.letterSpacing = px+'px'; }
+
+  function wrap(text, maxW){
+    const words = String(text).split(/\s+/).filter(Boolean); const lines=[]; let cur='';
+    for (const w of words){
+      const t = cur? cur+' '+w : w;
+      if (ctx.measureText(t).width <= maxW || !cur) cur=t; else { lines.push(cur); cur=w; }
+    }
+    if (cur) lines.push(cur);
+    return lines;
+  }
+
+  function background(){
+    ctx.fillStyle=C.cream; ctx.fillRect(0,0,W,H);
+    // soft white waves
+    ctx.save();
+    const waves=[[300,0.55],[620,0.45],[880,0.5]];
+    waves.forEach(([y,a],i)=>{
+      ctx.globalAlpha=a; ctx.fillStyle='#fff';
+      ctx.beginPath(); ctx.moveTo(0,y);
+      ctx.bezierCurveTo(W*0.3,y-90+i*20, W*0.6,y+80, W,y-30);
+      ctx.lineTo(W,y+40); ctx.bezierCurveTo(W*0.6,y+130, W*0.3,y-20+i*20, 0,y+60);
+      ctx.closePath(); ctx.fill();
+    });
+    ctx.restore();
+    // bars
+    ctx.fillStyle=C.navy; ctx.fillRect(0,0,W,14); ctx.fillRect(0,H-14,W,14);
+    ctx.fillStyle=C.gold; ctx.fillRect(0,14,W,6); ctx.fillRect(0,H-20,W,6);
+  }
+
+  function header(){
+    ctx.textAlign='center'; ctx.textBaseline='alphabetic'; ctx.fillStyle=C.navy;
+    ctx.font=font(700,30); setSpacing(2.5);
+    ctx.fillText((state.topline||'').toUpperCase(), W/2, 72);
+    setSpacing(0);
+    ctx.font=font(800,98,"'Playfair Display'");
+    ctx.fillText(state.title||'', W/2, 172);
+  }
+
+  // place sections into bands of a 3-column grid
+  function layout(){
+    const secs = state.sections.map(s=>({...s, src:s, events:s.events.filter(e=>(e.name||'').trim()||(e.date||'').trim())}))
+      .filter(s=>s.events.length || (s.heading||'').trim());
+    const bands=[]; let band=null;
+    secs.forEach(s=>{
+      const n=Math.max(1,s.events.length);
+      if (band && band.rows===1 && n <= 3-band.used){ band.items.push({sec:s,col:band.used,cols:n}); band.used+=n; }
+      else { band={rows:Math.ceil(n/3), used:Math.min(3,n), items:[{sec:s,col:0,cols:Math.min(3,n)}]}; bands.push(band); }
+      if (band.rows>1) band.used=3;
+    });
+    return bands;
+  }
+
+  function card(x,y,w,h,s,sec,ev){
+    const col = CARD_COLOURS[colourFor(sec.src||sec, ev)]||CARD_COLOURS.navy;
+    const rng = rangeFor(sec.src||sec, ev);
+    ctx.fillStyle=col.fill; rr(x,y,w,h,14*s); ctx.fill();
+    // calendar badge
+    const bx=x+16*s, by=y+14*s, bw=(rng?150:112)*s, bh=h-28*s, band=34*s;
+    ctx.fillStyle='#fff'; rr(bx,by,bw,bh,9*s); ctx.fill();
+    ctx.save(); rr(bx,by,bw,bh,9*s); ctx.clip();
+    ctx.fillStyle=col.band; ctx.fillRect(bx,by,bw,band); ctx.restore();
+    ctx.textAlign='center'; ctx.textBaseline='middle';
+    const dayTxt = rng ? rng.startDay+' – '+rng.endDay : dayFor(sec,ev);
+    let fs=22; ctx.font=font(700,fs*s); while(ctx.measureText(dayTxt).width>bw-10*s && fs>12){fs--; ctx.font=font(700,fs*s);}
+    ctx.fillStyle='#fff'; ctx.fillText(dayTxt, bx+bw/2, by+band/2+1*s);
+    const date = rng ? String(parseInt(ev.date,10))+'–'+String(parseInt(ev.end,10)) : String(ev.date||'').trim().toUpperCase();
+    let ds = rng ? 60 : (date.length>2 ? 50 : 64);
+    ctx.fillStyle=C.navy; ctx.font=font(800,ds*s);
+    while (ctx.measureText(date).width > bw-12*s && ds>20){ ds-=2; ctx.font=font(800,ds*s); }
+    ctx.fillText(date, bx+bw/2, by+band+(bh-band)/2+3*s);
+
+    // right side: "N DAYS" tag and/or icon
+    let reserve=0;
+    let tagBottom=y+14*s;
+    if (rng){
+      const label=rng.days+' DAYS';
+      ctx.font=font(800,20*s); const pw=ctx.measureText(label).width+26*s, ph=32*s;
+      const px=x+w-pw-14*s, py=y+12*s;
+      ctx.fillStyle=C.gold; rr(px,py,pw,ph,ph/2); ctx.fill();
+      ctx.fillStyle=C.navy; ctx.textAlign='center'; ctx.textBaseline='middle'; ctx.fillText(label,px+pw/2,py+ph/2+1*s);
+      reserve=Math.max(reserve,pw+10*s); tagBottom=py+ph+8*s;
+    }
+    const im=iconImg(ev.icon);
+    if (im){
+      const avail = (y+h-14*s) - tagBottom;
+      const sz=Math.min(84*s, avail);
+      const k=Math.min(sz/im.naturalWidth, sz/im.naturalHeight);
+      const iw=im.naturalWidth*k, ih=im.naturalHeight*k;
+      const cx=x+w-18*s-sz/2, cy=rng ? tagBottom+avail/2 : y+h/2;
+      ctx.drawImage(im, cx-iw/2, cy-ih/2, iw, ih);
+      reserve=Math.max(reserve, sz+14*s);
+    }
+
+    // text
+    const tx = bx+bw+22*s, tw = x+w-tx-18*s-reserve, innerH = h-28*s;
+    const loc=(ev.location||'').trim(), time=(ev.time||'').trim();
+    ctx.textAlign='left'; ctx.textBaseline='alphabetic';
+    let det=[];
+    ctx.font=font(400,26*s);
+    if (loc||time){
+      const one=[loc,time].filter(Boolean).join(' · ');
+      det = ctx.measureText(one).width<=tw ? [one] : [loc,time].filter(Boolean).flatMap(t=>wrap(t,tw)).slice(0,2);
+    }
+    let ts = 40, lines, tl, dl=30*s;
+    for(;;){
+      ctx.font=font(700,ts*s); lines=wrap(ev.name||'',tw); tl=ts*1.12*s;
+      const total = lines.length*tl + (det.length? 8*s + det.length*dl : 0);
+      if ((total<=innerH && lines.length<=3) || ts<=22) break;
+      ts-=2;
+    }
+    const total = lines.length*tl + (det.length? 8*s + det.length*dl : 0);
+    let cy = y + (h-total)/2;
+    ctx.fillStyle=col.text; ctx.font=font(700,ts*s);
+    lines.forEach(l=>{ cy+=tl; ctx.fillText(l,tx,cy-tl*0.2); });
+    if (det.length){
+      cy+=8*s; ctx.font=font(400,26*s);
+      det.forEach(l=>{ cy+=dl; ctx.fillText(l,tx,cy-dl*0.22); });
+    }
+  }
+
+  function draw(){
+    background(); header();
+    const bands=layout();
+    const top=212, bottom=H-44;
+    const HEAD=58, ROW=176, CARD_H=160, CW=584, GAP=24;
+    let need=0; bands.forEach(b=>need+=HEAD+b.rows*ROW-(ROW-CARD_H)+20);
+    need-=20;
+    const s=Math.min(1,(bottom-top)/Math.max(1,need));
+    const gridW=(CW*3+GAP*2)*s, x0=(W-gridW)/2;
+    let y=top + Math.max(0,((bottom-top)-need*s)/2*0.35);
+    bands.forEach(b=>{
+      b.items.forEach(it=>{
+        const hx = x0 + it.col*(CW+GAP)*s;
+        // the last section on a row stretches its heading line to the right edge
+        const isLast = it===b.items[b.items.length-1];
+        const lineEnd = x0 + (isLast ? 3 : (it.col+it.cols))*(CW+GAP)*s - GAP*s;
+        ctx.textAlign='left'; ctx.textBaseline='alphabetic'; ctx.fillStyle=C.navy;
+        ctx.font=font(800,44*s);
+        const label=(it.sec.heading||'').toUpperCase();
+        ctx.fillText(label, hx, y+42*s);
+        const lw=ctx.measureText(label).width;
+        if (hx+lw+20*s < lineEnd){ ctx.fillStyle=C.gold; ctx.fillRect(hx+lw+20*s, y+26*s, lineEnd-(hx+lw+20*s), 5*s); }
+        it.sec.events.forEach((ev,i)=>{
+          const c=it.col+(i%3), r=Math.floor(i/3);
+          card(x0+c*(CW+GAP)*s, y+HEAD*s+r*ROW*s, CW*s, CARD_H*s, s, it.sec, ev);
+        });
+      });
+      y += (HEAD + b.rows*ROW - (ROW-CARD_H) + 20)*s;
+    });
+  }
+
+  // ---------- Buttons ----------
+  let downloads=null;
+  if (window.claude && typeof window.claude.use==='function'){
+    window.claude.use('downloads').then(d=>{downloads=d;}).catch(()=>{});
+  }
+  async function offer(filename, data){
+    if (downloads){
+      try { await downloads.save({filename, data}); note('Saved '+filename); return; }
+      catch(e){ if (e && e.code==='declined') { note('Download cancelled.'); return; } }
+    }
+    // fallback for when the page is opened outside Claude
+    try{
+      const url=URL.createObjectURL(data instanceof Blob?data:new Blob([data]));
+      const a=el('a',{href:url,download:filename}); document.body.append(a); a.click(); a.remove();
+      setTimeout(()=>URL.revokeObjectURL(url),5000);
+    }catch(e){ note('Downloads are not available here.'); }
+  }
+  function stamp(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+  document.getElementById('download').addEventListener('click',()=>{
+    draw(); cv.toBlob(b=>{ if(b) offer('upcoming-events-'+stamp()+'.png', b); else note('Could not make the image.'); },'image/png');
+  });
+  document.getElementById('backup').addEventListener('click',()=>offer('poster-events-backup-'+stamp()+'.json', JSON.stringify(state,null,2)));
+  document.getElementById('restore').addEventListener('click',()=>document.getElementById('restoreFile').click());
+  document.getElementById('restoreFile').addEventListener('change',async e=>{
+    const f=e.target.files[0]; if(!f) return;
+    try{ const s=JSON.parse(await f.text()); if(!Array.isArray(s.sections)) throw 0; state=s; ensureTypes(); changed(true); note('Backup loaded.'); }
+    catch(err){ note('That file isn\'t a poster backup.'); }
+    e.target.value='';
+  });
+  const resetBtn=document.getElementById('reset');
+  resetBtn.addEventListener('click',()=>{
+    if (!resetBtn.dataset.armed){ resetBtn.dataset.armed=1; resetBtn.textContent='Click again to clear'; setTimeout(()=>{delete resetBtn.dataset.armed; resetBtn.textContent='Start over';},3000); return; }
+    state={topline:state.topline,title:state.title,sections:[{type:'current',month:new Date().getMonth(),year:new Date().getFullYear(),heading:MONTH_NAMES[new Date().getMonth()]+' '+new Date().getFullYear(),events:[{name:'',date:'',day:'',location:'',time:'',colour:'auto'}]}]};
+    delete resetBtn.dataset.armed; resetBtn.textContent='Start over'; changed(true);
+  });
+
+  // ---------- Saved posters (kept with the page) ----------
+  const listEl=document.getElementById('savedList'), nameEl=document.getElementById('saveName'), saveBtn=document.getElementById('saveBtn');
+  let db=null, savedDocs=[], openName=state._savedName||'';
+  // When the page runs outside Claude (e.g. GitHub Pages), saved posters live in this browser instead.
+  const LKEY='events-poster-maker-saved';
+  function localAll(){ try{ return JSON.parse(localStorage.getItem(LKEY))||{}; }catch(e){ return {}; } }
+  function localPut(o){ try{ localStorage.setItem(LKEY, JSON.stringify(o)); return true; }catch(e){ return false; } }
+  function localDocs(){ return Object.entries(localAll()).sort((a,b)=>b[1].savedAt-a[1].savedAt).map(([id,v])=>({id, data:()=>v})); }
+  const localDb = { collection:()=>({ doc:(id)=>({
+      set:async(v)=>{ const o=localAll(); o[id]=v; if(!localPut(o)) throw {code:'quota_exceeded'}; savedDocs=localDocs(); },
+      delete:async()=>{ const o=localAll(); delete o[id]; localPut(o); savedDocs=localDocs(); renderSaved(); } }) }) };
+  function useLocal(){ db=localDb; savedDocs=localDocs(); renderSaved(); }
+  nameEl.value = openName;
+  function slug(n){ return (n.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,80)) || 'poster'; }
+  function when(t){ try{ return new Date(t).toLocaleString(undefined,{day:'numeric',month:'short',year:'numeric',hour:'numeric',minute:'2-digit'}); }catch(e){ return ''; } }
+  function renderSaved(){
+    listEl.innerHTML='';
+    if (!savedDocs.length){ listEl.append(el('div',{className:'mini',textContent:'No saved posters yet. Give this one a name and press Save.'})); return; }
+    savedDocs.forEach(d=>{
+      const v=d.data(); const del=el('button',{textContent:'Delete',title:'Delete this saved poster'});
+      del.addEventListener('click',async()=>{
+        if(!del.dataset.armed){ del.dataset.armed=1; del.textContent='Sure?'; setTimeout(()=>{delete del.dataset.armed; del.textContent='Delete';},3000); return; }
+        try{ await db.collection('posters').doc(d.id).delete(); note('Deleted "'+v.name+'".'); }catch(e){ note('Could not delete it. Try again.'); }
+      });
+      listEl.append(el('div',{className:'saved-item'+(v.name===openName?' current':'')},
+        el('div',{}, el('div',{className:'nm',textContent:v.name}), el('div',{className:'when',textContent:'Saved '+when(v.savedAt)})),
+        el('button',{textContent:'Open',title:'Load this poster into the editor',on:{click:()=>{
+          try{ state=JSON.parse(JSON.stringify(v.state)); }catch(e){ note('That save could not be read.'); return; }
+          ensureTypes(); openName=v.name; state._savedName=v.name; nameEl.value=v.name; changed(true); renderSaved(); note('Opened "'+v.name+'".');
+        }}}),
+        del));
+    });
+  }
+  saveBtn.addEventListener('click',async()=>{
+    const name=nameEl.value.trim();
+    if(!name){ note('Type a name for this poster first.'); nameEl.focus(); return; }
+    if(!db){ note('Saving here isn\'t available right now — use Save backup instead.'); return; }
+    saveBtn.disabled=true;
+    try{
+      const copy=JSON.parse(JSON.stringify(state)); delete copy._savedName;
+      await db.collection('posters').doc(slug(name)).set({name, savedAt:Date.now(), state:copy});
+      openName=name; state._savedName=name; save(); renderSaved(); note('Saved "'+name+'".');
+    }catch(e){
+      note(e&&e.code==='quota_exceeded' ? 'Storage is full — delete some old saves first.' : 'Could not save. Check you\'re signed in, then try again.');
+    }finally{ saveBtn.disabled=false; }
+  });
+  if (window.claude && typeof window.claude.use==='function'){
+    window.claude.use('db').then(d=>{
+      db=d;
+      if(!db){ useLocal(); return; }
+      const timer=setTimeout(()=>{ if(!savedDocs.length) { listEl.innerHTML=''; listEl.append(el('div',{className:'mini',textContent:'Still connecting to your saved posters…'})); } },10000);
+      db.collection('posters').orderBy('savedAt','desc').onSnapshot(snap=>{
+        if(!snap.metadata.fromCache) clearTimeout(timer);
+        savedDocs=snap.docs; renderSaved();
+      }, err=>{ clearTimeout(timer); listEl.innerHTML=''; listEl.append(el('div',{className:'mini',textContent:'Couldn\'t load saved posters. Reload the page to try again.'})); });
+    }).catch(()=>{});
+  } else {
+    useLocal();
+  }
+
+  buildEditor();
+  draw();
+  Promise.all([
+    document.fonts.load(font(400,26)), document.fonts.load(font(700,40)), document.fonts.load(font(800,44)),
+    document.fonts.load(font(800,98,"'Playfair Display'"))
+  ]).then(()=>draw()).catch(()=>{});
+  document.fonts.ready.then(()=>draw());
+})();
+</script>
+</body>
+</html>
