@@ -31,6 +31,32 @@
   input,select{font:inherit;width:100%;padding:7px 9px;border:1px solid var(--line);border-radius:7px;background:#fff;color:var(--ink)}
   input:focus,select:focus{outline:2px solid #9db0e0;outline-offset:0;border-color:#9db0e0}
   .row{margin-bottom:12px}
+  .tabs{display:flex;gap:4px;border-bottom:1px solid var(--line);margin:0 0 16px}
+  .tab{border:0;border-bottom:3px solid transparent;border-radius:0;background:none;padding:8px 14px;font-weight:700;color:var(--muted)}
+  .tab:hover{background:none;color:var(--ink)}
+  .tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+  .tv-help{margin:0 0 10px;line-height:1.4}
+  .tv-wrap{overflow:auto;border:1px solid var(--line);border-radius:8px;max-height:calc(100vh - 380px);min-height:200px}
+  table.tv{border-collapse:separate;border-spacing:0;font-size:13px;min-width:100%;table-layout:auto}
+  .tv td select{padding-right:2px}
+  .tv th{position:sticky;top:0;background:#eef1f8;color:#374151;font-weight:700;text-align:left;padding:7px 6px;border-bottom:1px solid #d7ddec;white-space:nowrap;z-index:1}
+  .tv td{padding:0;border-bottom:1px solid var(--line);border-right:1px solid #f0eee9}
+  .tv td input,.tv td select{border:0;border-radius:0;padding:7px 6px;background:transparent;font-size:13px;width:100%;min-width:0}
+  .tv td input:focus,.tv td select:focus{outline:2px solid #9db0e0;outline-offset:-2px;background:#fff}
+  .tv tr.sec-start td{border-top:2px solid #c9d3ea}
+  .tv tr:hover td{background:#fafbfe}
+  .tv .c-type{min-width:108px}.tv .c-month{min-width:114px}.tv .c-year{min-width:60px}.tv .c-year{width:70px}.tv .c-name{min-width:200px}
+  .tv .c-date,.tv .c-end{min-width:50px}.tv .c-day{min-width:60px}.tv .c-loc{min-width:150px}.tv .c-time{min-width:110px}.tv .c-col{width:96px}.tv .c-del{width:34px}
+  .tv td.del button{border:0;background:none;color:var(--muted);padding:6px 10px}
+  .tv td.del button:hover{color:var(--danger)}
+  .tv-actions{margin-top:8px}
+  .tv .c-drag{width:26px}
+  .tv td.drag{text-align:center;padding:0 2px}
+  .tv td.drag .handle{padding:4px 2px;font-size:14px}
+  .tv tr.dragging td{opacity:.4}
+  .tv tr.drop-before td{box-shadow:inset 0 3px 0 0 #2E5FAE}
+  .tv tr.drop-after td{box-shadow:inset 0 -3px 0 0 #2E5FAE}
+  .tv-empty{padding:16px;color:var(--muted)}
   .saved{border:1px solid #d7ddec;background:#f5f7fc;border-radius:10px;padding:12px;margin-bottom:18px}
   .saved-title{font-weight:700;margin-bottom:8px}
   .saved-save{display:grid;grid-template-columns:1fr auto;gap:6px}
@@ -104,6 +130,12 @@
       <div id="savedList" class="saved-list"><div class="mini">Loading saved posters…</div></div>
     </div>
 
+    <div class="tabs" role="tablist">
+      <button class="tab active" role="tab" id="tabForm" aria-selected="true">Form</button>
+      <button class="tab" role="tab" id="tabTable" aria-selected="false">Table</button>
+    </div>
+
+    <div id="formView">
     <div class="row">
       <label class="field" for="topline">Top line</label>
       <input id="topline">
@@ -119,14 +151,26 @@
       <button class="add" data-type="upcoming">+ Upcoming month</button>
       <button class="add" data-type="weekly">+ Every week</button>
     </div>
+    </div>
+
+    <div id="tableView" hidden>
+      <p class="mini tv-help">One row per event. Type straight into the cells, or copy rows from Excel / Google Sheets and paste them into any cell. Rows with the same section, month and year are grouped together on the poster.</p>
+      <div class="tv-wrap"><table class="tv" id="tv"></table></div>
+      <div class="tv-actions">
+        <button class="add" id="tvAdd">+ Add row</button>
+      </div>
+    </div>
 
     <div class="toolbar">
       <button class="primary" id="download">Download poster (PNG)</button>
-      <button id="backup">Save backup</button>
+      <button id="csvSave" title="Save the events as a spreadsheet file you can send to someone">Save as CSV</button>
+      <button id="csvOpen" title="Open a CSV saved from this page">Open CSV</button>
+      <button id="backup" title="Full backup, including event icons">Save backup</button>
       <button id="restore">Load backup</button>
       <button id="reset">Start over</button>
       <input type="file" id="restoreFile" accept=".json,application/json">
       <input type="file" id="iconFile" accept="image/*">
+      <input type="file" id="csvFile" accept=".csv,text/csv">
     </div>
     <div class="note" id="note"></div>
   </aside>
@@ -430,7 +474,8 @@
   }));
 
   let raf=0;
-  function changed(rebuild){ save(); if(rebuild) buildEditor(); cancelAnimationFrame(raf); raf=requestAnimationFrame(draw); }
+  function changed(rebuild){ save(); if(rebuild && !tableOn) buildEditor(); cancelAnimationFrame(raf); raf=requestAnimationFrame(draw); }
+  function refreshViews(){ if(tableOn) renderTable(); else buildEditor(); }
 
   // ---------- Poster drawing ----------
   const cv = document.getElementById('poster');
@@ -611,11 +656,279 @@
   document.getElementById('download').addEventListener('click',()=>{
     draw(); cv.toBlob(b=>{ if(b) offer('upcoming-events-'+stamp()+'.png', b); else note('Could not make the image.'); },'image/png');
   });
+  // ---------- Table view ----------
+  const TV_COLS=[
+    {k:'type',label:'Section',cls:'c-type'},{k:'month',label:'Month',cls:'c-month'},{k:'year',label:'Year',cls:'c-year'},
+    {k:'name',label:'Event',cls:'c-name'},{k:'date',label:'Date',cls:'c-date'},{k:'end',label:'End',cls:'c-end'},
+    {k:'day',label:'Day',cls:'c-day'},{k:'location',label:'Location',cls:'c-loc'},{k:'time',label:'Time',cls:'c-time'},
+    {k:'colour',label:'Colour',cls:'c-col'}];
+  const tvEl=document.getElementById('tv');
+  let tableOn=false;
+  // flatten sections -> rows (each row keeps a reference to its event object, so icons etc. survive)
+  function tvRows(){
+    const rows=[];
+    state.sections.forEach(sc=>sc.events.forEach(ev=>rows.push({type:sc.type, month:sc.month, year:sc.year, heading:sc.heading, ev})));
+    return rows;
+  }
+  // rebuild sections from rows, keeping first-appearance order; empty sections are kept at their place
+  function tvApply(rows){
+    const old=state.sections, out=[], byKey={};
+    const keyOf=r=> r.type==='weekly' ? 'weekly|'+(r.heading||'') : 'm|'+r.month+'|'+r.year;
+    rows.forEach(r=>{
+      const k=keyOf(r);
+      let sc=byKey[k];
+      if(!sc){
+        const prev=old.find(o=> (o.type==='weekly' ? 'weekly|'+(o.heading||'') : 'm|'+o.month+'|'+o.year)===k);
+        sc={type:r.type, heading: r.type==='weekly' ? (r.heading||'Every Week') : '', events:[]};
+        if(r.type!=='weekly'){ sc.month=r.month; sc.year=r.year; setHeading(sc); }
+        else if(prev) sc.heading=prev.heading;
+        byKey[k]=sc; out.push(sc);
+      }
+      sc.events.push(r.ev);
+    });
+    old.forEach(o=>{ if(!o.events.length){ const k=o.type==='weekly'?'weekly|'+(o.heading||''):'m|'+o.month+'|'+o.year; if(!byKey[k]){ byKey[k]=o; out.push(o);} } });
+    state.sections=out;
+  }
+  function tvCell(row, col, ri){
+    const ev=row.ev;
+    const onStruct=v=>{
+      const rows=tvRows(); const r=rows[ri];
+      if(col.k==='type' && r.type!=='weekly' && v!=='weekly'){
+        // switching between Current and Upcoming changes the whole month
+        rows.forEach(x=>{ if(x.type!=='weekly' && x.month===r.month && x.year===r.year) x.type=v; });
+      } else {
+        r[col.k]=v;
+        if(col.k==='type' && v!=='weekly' && (r.month==null||!r.year)){ const n=nextMonthAfter(state.sections.length); r.month=n.month; r.year=n.year; }
+        if(col.k==='type' && v==='weekly'){ const w=state.sections.find(x=>x.type==='weekly'); r.heading = w ? w.heading : 'Every Week'; }
+      }
+      if(r.type!=='weekly'){ const ex=state.sections.find(x=>x.type!=='weekly' && x.month===r.month && x.year===r.year && !x.events.includes(ev)); if(ex) r.type=ex.type; }
+      // a row that moved into another existing section goes to the end of it
+      if(col.k!=='type' || r.type==='weekly'){
+        const same=x=> x!==r && (r.type==='weekly' ? x.type==='weekly' : (x.type!=='weekly' && x.month===r.month && x.year===r.year));
+        let last=-1; rows.forEach((x,i)=>{ if(same(x)) last=i; });
+        if(last>=0){ rows.splice(ri,1); if(last>ri) last--; rows.splice(last+1,0,r); }
+      }
+      tvApply(rows); changed(true);
+      const ni=tvRows().findIndex(x=>x.ev===ev); renderTable(ni<0?ri:ni, col.k);
+    };
+    let ctl;
+    if(col.k==='type'){
+      ctl=el('select',{'aria-label':'Section', on:{change:e=>onStruct(e.target.value)}},
+        Object.entries({current:'Current',upcoming:'Upcoming',weekly:'Every week'}).map(([k,v])=>el('option',{value:k,textContent:v,selected:row.type===k})));
+    } else if(col.k==='month'){
+      if(row.type==='weekly') return el('td',{className:'muted'});
+      ctl=el('select',{'aria-label':'Month', on:{change:e=>onStruct(+e.target.value)}},
+        MONTH_NAMES.map((n,i)=>el('option',{value:String(i),textContent:n,selected:row.month===i})));
+    } else if(col.k==='year'){
+      if(row.type==='weekly') return el('td',{});
+      ctl=el('input',{value:row.year||'', inputMode:'numeric','aria-label':'Year', on:{change:e=>{ const y=parseInt(e.target.value,10); if(!isNaN(y)) onStruct(y); else e.target.value=row.year||''; }}});
+    } else if(col.k==='colour'){
+      ctl=el('select',{'aria-label':'Card colour', on:{change:e=>{ ev.colour=e.target.value; changed(true); renderTable(ri,'colour'); }}},
+        [el('option',{value:'auto',textContent:'Auto',selected:!ev.colour||ev.colour==='auto'})]
+        .concat(Object.entries(CARD_COLOURS).map(([k,v])=>el('option',{value:k,textContent:v.label.split(' ')[0],selected:ev.colour===k}))));
+    } else {
+      let ph='';
+      if(col.k==='day'){ const sc=state.sections.find(x=>x.events.includes(ev)); ph = sc ? (sc.type==='weekly'?'EVERY':autoDay(sc.heading, ev.date)) : ''; }
+      ctl=el('input',{value:ev[col.k]||'', placeholder:ph, 'aria-label':col.label,
+        on:{input:e=>{ ev[col.k]=e.target.value; changed(true);
+              if(col.k==='date'){ const dc=e.target.closest('tr').querySelector('td[data-k=day] input'); const sc=state.sections.find(x=>x.events.includes(ev)); if(dc&&sc) dc.placeholder = sc.type==='weekly'?'EVERY':(autoDay(sc.heading, ev.date)||''); } },
+            paste:e=>tvPaste(e, ri, col.k)}});
+    }
+    const td=el('td',{},ctl); td.dataset.k=col.k; return td;
+  }
+  function renderTable(focusRow, focusKey){
+    if(!tableOn) return;
+    const rows=tvRows();
+    tvEl.innerHTML='';
+    tvEl.append(el('thead',{}, el('tr',{}, el('th',{className:'c-drag'}), TV_COLS.map(c=>el('th',{className:c.cls,textContent:c.label})), el('th',{className:'c-del'}))));
+    const tb=el('tbody',{});
+    let prevKey=null;
+    rows.forEach((r,ri)=>{
+      const k=r.type==='weekly' ? 'w|'+r.heading : 'm|'+r.month+'|'+r.year;
+      const tr=el('tr',{className: (prevKey!==null && k!==prevKey) ? 'sec-start':''}); prevKey=k;
+      tr.dataset.ri=ri;
+      const h=el('span',{className:'handle',textContent:'⋮⋮',title:'Drag to move this row','aria-label':'Drag to move this row'});
+      h.addEventListener('mousedown',()=>{ tr.draggable=true; });
+      h.addEventListener('touchstart',()=>{ tr.draggable=true; },{passive:true});
+      tr.addEventListener('dragstart',e=>{ if(!tr.draggable) return; tvDrag=ri; tr.classList.add('dragging'); try{ e.dataTransfer.effectAllowed='move'; e.dataTransfer.setData('text/plain',''); }catch(_){} });
+      tr.addEventListener('dragend',()=>{ tr.draggable=false; tr.classList.remove('dragging'); tvClear(); tvDrag=null; });
+      tr.addEventListener('dragover',e=>{ if(tvDrag==null) return; e.preventDefault(); tvClear();
+        const rc=tr.getBoundingClientRect(); const where = e.clientY < rc.top+rc.height/2 ? 'before':'after';
+        tr.classList.add('drop-'+where); tvTarget={ri, where}; });
+      tr.addEventListener('drop',e=>{ e.preventDefault(); tvDrop(); });
+      tr.append(el('td',{className:'drag'}, h));
+      TV_COLS.forEach(c=>tr.append(tvCell(r,c,ri)));
+      tr.append(el('td',{className:'del'}, el('button',{title:'Delete this row',textContent:'✕','aria-label':'Delete row',on:{click:()=>{
+        const sc=state.sections.find(x=>x.events.includes(r.ev)); if(sc) sc.events.splice(sc.events.indexOf(r.ev),1); changed(true); renderTable(); }}})));
+      tb.append(tr);
+    });
+    if(!rows.length) tb.append(el('tr',{}, el('td',{colSpan:TV_COLS.length+2,className:'tv-empty',textContent:'No events yet. Click + Add row, or paste rows from a spreadsheet.'})));
+    tvEl.append(tb);
+    if(focusRow!=null && focusKey){
+      const rws=tb.querySelectorAll('tr'); const tr=rws[Math.min(focusRow, rws.length-1)];
+      tr?.querySelector('td[data-k='+focusKey+'] input, td[data-k='+focusKey+'] select')?.focus();
+    }
+  }
+  let tvDrag=null, tvTarget=null;
+  function tvClear(){ tvEl.querySelectorAll('.drop-before,.drop-after').forEach(x=>x.classList.remove('drop-before','drop-after')); }
+  document.addEventListener('mouseup',()=>{ if(tvDrag==null) tvEl.querySelectorAll('tr[draggable=true]').forEach(t=>t.draggable=false); });
+  function tvDrop(){
+    if(tvDrag==null||!tvTarget) return;
+    const rows=tvRows(); const from=tvDrag, tgt=rows[tvTarget.ri];
+    if(!tgt || from===tvTarget.ri){ tvClear(); tvDrag=tvTarget=null; return; }
+    const moved=rows[from];
+    // the moved event joins the section of the row it was dropped next to
+    moved.type=tgt.type; moved.month=tgt.month; moved.year=tgt.year; moved.heading=tgt.heading;
+    rows.splice(from,1);
+    let to=rows.indexOf(tgt) + (tvTarget.where==='after'?1:0);
+    rows.splice(to,0,moved);
+    tvDrag=tvTarget=null; tvClear();
+    tvApply(rows); changed(true); renderTable();
+    note('Moved "'+(moved.ev.name||'event')+'".');
+  }
+
+  document.getElementById('tvAdd').addEventListener('click',()=>{
+    const rows=tvRows(); const last=rows[rows.length-1];
+    let sc = last ? state.sections.find(x=>x.events.includes(last.ev)) : state.sections.find(x=>x.type!=='weekly');
+    if(sc && sc.type==='weekly'){ sc = [...state.sections].reverse().find(x=>x.type!=='weekly') || sc; }
+    if(!sc){ const d=new Date(); sc={type:'current',month:d.getMonth(),year:d.getFullYear(),events:[]}; setHeading(sc); state.sections.push(sc); }
+    sc.events.push({name:'',date:'',day:'',location:'',time:'',colour:'auto'});
+    changed(true); renderTable();
+    const all=tvRows(); const idx=all.findIndex(r=>r.ev===sc.events[sc.events.length-1]);
+    tvEl.querySelectorAll('tbody tr')[idx]?.querySelector('td[data-k=name] input')?.focus();
+  });
+  // paste a block of cells (tab-separated, from a spreadsheet) starting at this cell
+  function tvPaste(e, ri, key){
+    const text=(e.clipboardData||window.clipboardData)?.getData('text')||'';
+    if(!/[\t\n]/.test(text.replace(/\n$/,''))) return; // single value: let the input handle it
+    e.preventDefault();
+    const lines=text.replace(/\r/g,'').replace(/\n+$/,'').split('\n').map(l=>l.split('\t'));
+    const startCol=TV_COLS.findIndex(c=>c.k===key);
+    const rows=tvRows();
+    const tmpl = rows[ri] || rows[rows.length-1] || {type:'current', month:new Date().getMonth(), year:new Date().getFullYear(), heading:''};
+    const sameSec=x=> x && (tmpl.type==='weekly' ? x.type==='weekly' : (x.type!=='weekly' && x.month===tmpl.month && x.year===tmpl.year));
+    let at=ri-1;
+    lines.forEach((cells,li)=>{
+      at++;
+      let r=rows[at];
+      // overwrite following rows only while they're in the same section; otherwise insert new rows
+      if(!(li===0 && r) && !sameSec(r)){ r={type:tmpl.type, month:tmpl.month, year:tmpl.year, heading:tmpl.heading, ev:{name:'',date:'',day:'',location:'',time:'',colour:'auto'}}; rows.splice(at,0,r); }
+      cells.forEach((v,ci)=>{
+        const col=TV_COLS[startCol+ci]; if(!col) return; v=String(v).trim();
+        if(col.k==='type'){ const t=v.toLowerCase(); r.type = t.startsWith('every')||t==='weekly' ? 'weekly' : t.startsWith('up') ? 'upcoming' : 'current'; }
+        else if(col.k==='month'){ const m=MONTH_NAMES.findIndex(n=>n.toLowerCase()===v.toLowerCase() || (v.length>=3 && n.toLowerCase().startsWith(v.toLowerCase().slice(0,3)))); if(m>=0) r.month=m; }
+        else if(col.k==='year'){ const y=parseInt(v,10); if(!isNaN(y)) r.year=y; }
+        else if(col.k==='colour'){ const c=v.toLowerCase(); r.ev.colour = CARD_COLOURS[c] ? c : 'auto'; }
+        else r.ev[col.k]=v;
+      });
+      if(r.type!=='weekly' && (r.month==null||!r.year)){ const d=new Date(); if(r.month==null) r.month=d.getMonth(); if(!r.year) r.year=d.getFullYear(); }
+    });
+    rows.forEach(r=>{ if(r.type!=='weekly'){ const ex=state.sections.find(x=>x.type!=='weekly' && x.month===r.month && x.year===r.year); if(ex) r.type=ex.type; } });
+    tvApply(rows); changed(true); renderTable(ri, key);
+    note('Pasted '+lines.length+' row'+(lines.length>1?'s':'')+'.');
+  }
+  // tabs
+  const tabForm=document.getElementById('tabForm'), tabTable=document.getElementById('tabTable');
+  const formView=document.getElementById('formView'), tableView=document.getElementById('tableView');
+  let formWidth=null;
+  function showTab(t){
+    tableOn = t==='table';
+    tabForm.classList.toggle('active',!tableOn); tabTable.classList.toggle('active',tableOn);
+    tabForm.setAttribute('aria-selected',String(!tableOn)); tabTable.setAttribute('aria-selected',String(tableOn));
+    formView.hidden=tableOn; tableView.hidden=!tableOn;
+    if(window.__panel){
+      if(tableOn){ formWidth=window.__panel.get(); if(formWidth<820) window.__panel.set(Math.min(1000, window.innerWidth*0.62), true); }
+      else if(formWidth!=null){ window.__panel.set(formWidth, true); formWidth=null; }
+    }
+    if(tableOn) renderTable(); else buildEditor();
+    try{ localStorage.setItem('events-poster-maker-tab', t); }catch(e){}
+  }
+  tabForm.addEventListener('click',()=>showTab('form'));
+  tabTable.addEventListener('click',()=>showTab('table'));
+
+  // ---------- CSV ----------
+  const CSV_COLS=['Section type','Month','Year','Heading','Event','Date','End date','Day','Location','Time','Colour'];
+  const TYPE_LABEL={current:'Current month',upcoming:'Upcoming month',weekly:'Every week'};
+  function csvCell(v){ v=v==null?'':String(v); return /[",\n\r]/.test(v) ? '"'+v.replace(/"/g,'""')+'"' : v; }
+  function toCSV(){
+    const rows=[CSV_COLS];
+    rows.push(['Poster','','','Top line',state.topline||'','','','','','','']);
+    rows.push(['Poster','','','Title',state.title||'','','','','','','']);
+    state.sections.forEach(sc=>{
+      const base=[TYPE_LABEL[sc.type]||'Current month', sc.type==='weekly'?'':(MONTH_NAMES[sc.month]||''), sc.type==='weekly'?'':(sc.year||''), sc.heading||''];
+      const evs=sc.events.length?sc.events:[null];
+      evs.forEach(ev=>{
+        rows.push(base.concat(ev ? [ev.name||'',ev.date||'',ev.end||'',ev.day||'',ev.location||'',ev.time||'',(!ev.colour||ev.colour==='auto')?'Auto':ev.colour] : ['','','','','','','']));
+      });
+    });
+    return '\uFEFF'+rows.map(r=>r.map(csvCell).join(',')).join('\r\n')+'\r\n';
+  }
+  function parseCSV(text){
+    text=text.replace(/^\uFEFF/,'');
+    const rows=[]; let row=[], cell='', q=false;
+    for(let i=0;i<text.length;i++){
+      const c=text[i];
+      if(q){ if(c==='"'){ if(text[i+1]==='"'){cell+='"';i++;} else q=false; } else cell+=c; }
+      else if(c==='"') q=true;
+      else if(c===','){ row.push(cell); cell=''; }
+      else if(c==='\n'||c==='\r'){ if(c==='\r'&&text[i+1]==='\n') i++; row.push(cell); rows.push(row); row=[]; cell=''; }
+      else cell+=c;
+    }
+    if(cell!==''||row.length){ row.push(cell); rows.push(row); }
+    return rows.filter(r=>r.some(x=>x.trim()!==''));
+  }
+  function fromCSV(text){
+    const rows=parseCSV(text);
+    if(!rows.length) throw new Error('empty');
+    const head=rows[0].map(h=>h.trim().toLowerCase());
+    const ix=n=>head.indexOf(n.toLowerCase());
+    if(ix('Event')<0||ix('Section type')<0) throw new Error('not ours');
+    const g=(r,n)=>{ const i=ix(n); return i<0?'':String(r[i]==null?'':r[i]).trim(); };
+    const out={topline:state.topline, title:state.title, sections:[]};
+    let cur=null, key='';
+    rows.slice(1).forEach(r=>{
+      const t=g(r,'Section type').toLowerCase();
+      if(t==='poster'){ const h=g(r,'Heading').toLowerCase(); if(h==='top line') out.topline=g(r,'Event'); if(h==='title') out.title=g(r,'Event'); return; }
+      const type = t.startsWith('every')||t==='weekly' ? 'weekly' : t.startsWith('upcoming') ? 'upcoming' : 'current';
+      const mName=g(r,'Month').toLowerCase();
+      const mi=MONTH_NAMES.findIndex(n=>n.toLowerCase()===mName || n.toLowerCase().slice(0,3)===mName.slice(0,3)&&mName.length>=3);
+      const year=parseInt(g(r,'Year'),10);
+      const heading=g(r,'Heading');
+      const k=[type, mi, year, heading].join('|');
+      if(!cur || k!==key){
+        cur={type, heading: heading || (type==='weekly'?'Every Week':''), events:[]};
+        if(type!=='weekly'){ if(mi>=0) cur.month=mi; if(!isNaN(year)) cur.year=year; }
+        out.sections.push(cur); key=k;
+      }
+      const name=g(r,'Event'), date=g(r,'Date');
+      if(!name && !date) return;
+      const col=g(r,'Colour').toLowerCase();
+      cur.events.push({name, date, end:g(r,'End date'), day:g(r,'Day'), location:g(r,'Location'), time:g(r,'Time'),
+        colour: CARD_COLOURS[col] ? col : 'auto'});
+    });
+    if(!out.sections.length) throw new Error('no events');
+    return out;
+  }
+  document.getElementById('csvSave').addEventListener('click',()=>{
+    const nm=(nameEl&&nameEl.value.trim()) || (state.sections.find(x=>x.type!=='weekly')?.heading) || 'events';
+    offer('poster-events-'+slugName(nm)+'.csv', toCSV());
+  });
+  document.getElementById('csvOpen').addEventListener('click',()=>document.getElementById('csvFile').click());
+  document.getElementById('csvFile').addEventListener('change',async e=>{
+    const f=e.target.files[0]; e.target.value=''; if(!f) return;
+    try{
+      const s2=fromCSV(await f.text());
+      state=s2; ensureTypes(); openName=''; nameEl.value=''; changed(true); refreshViews(); renderSaved();
+      note('Opened '+f.name+'.');
+    }catch(err){ note('That CSV isn\'t one saved from this page.'); }
+  });
+  function slugName(n){ return n.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60)||'events'; }
+
   document.getElementById('backup').addEventListener('click',()=>offer('poster-events-backup-'+stamp()+'.json', JSON.stringify(state,null,2)));
   document.getElementById('restore').addEventListener('click',()=>document.getElementById('restoreFile').click());
   document.getElementById('restoreFile').addEventListener('change',async e=>{
     const f=e.target.files[0]; if(!f) return;
-    try{ const s=JSON.parse(await f.text()); if(!Array.isArray(s.sections)) throw 0; state=s; ensureTypes(); changed(true); note('Backup loaded.'); }
+    try{ const s=JSON.parse(await f.text()); if(!Array.isArray(s.sections)) throw 0; state=s; ensureTypes(); changed(true); refreshViews(); note('Backup loaded.'); }
     catch(err){ note('That file isn\'t a poster backup.'); }
     e.target.value='';
   });
@@ -623,7 +936,7 @@
   resetBtn.addEventListener('click',()=>{
     if (!resetBtn.dataset.armed){ resetBtn.dataset.armed=1; resetBtn.textContent='Click again to clear'; setTimeout(()=>{delete resetBtn.dataset.armed; resetBtn.textContent='Start over';},3000); return; }
     state={topline:state.topline,title:state.title,sections:[{type:'current',month:new Date().getMonth(),year:new Date().getFullYear(),heading:MONTH_NAMES[new Date().getMonth()]+' '+new Date().getFullYear(),events:[{name:'',date:'',day:'',location:'',time:'',colour:'auto'}]}]};
-    delete resetBtn.dataset.armed; resetBtn.textContent='Start over'; changed(true);
+    delete resetBtn.dataset.armed; resetBtn.textContent='Start over'; changed(true); refreshViews();
   });
 
   // ---------- Saved posters (kept with the page) ----------
@@ -654,7 +967,7 @@
         el('div',{}, el('div',{className:'nm',textContent:v.name}), el('div',{className:'when',textContent:'Saved '+when(v.savedAt)})),
         el('button',{textContent:'Open',title:'Load this poster into the editor',on:{click:()=>{
           try{ state=JSON.parse(JSON.stringify(v.state)); }catch(e){ note('That save could not be read.'); return; }
-          ensureTypes(); openName=v.name; state._savedName=v.name; nameEl.value=v.name; changed(true); renderSaved(); note('Opened "'+v.name+'".');
+          ensureTypes(); openName=v.name; state._savedName=v.name; nameEl.value=v.name; changed(true); refreshViews(); renderSaved(); note('Opened "'+v.name+'".');
         }}}),
         del));
     });
@@ -694,6 +1007,7 @@
     function setW(w){ w=Math.min(max(),Math.max(MIN,Math.round(w))); app.style.setProperty('--ew', w+'px'); return w; }
     let saved=null; try{ saved=parseInt(localStorage.getItem(WKEY),10); }catch(e){}
     let cur=setW(saved||DEF);
+    window.__panel={ get:()=>cur, set:(w,keep)=>{ cur=setW(w); if(!keep) store(); } };
     function store(){ try{ localStorage.setItem(WKEY,String(cur)); }catch(e){} }
     rz.addEventListener('pointerdown',e=>{
       e.preventDefault(); rz.setPointerCapture(e.pointerId); rz.classList.add('active'); document.body.classList.add('resizing');
@@ -713,6 +1027,7 @@
 
   buildEditor();
   draw();
+  try{ if(localStorage.getItem('events-poster-maker-tab')==='table') showTab('table'); }catch(e){}
   Promise.all([
     document.fonts.load(font(400,26)), document.fonts.load(font(700,40)), document.fonts.load(font(800,44)),
     document.fonts.load(font(800,98,"'Playfair Display'"))
